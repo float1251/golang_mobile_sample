@@ -20,32 +20,34 @@ var tableVertices = f32.Bytes(binary.LittleEndian,
 	// Order of XYRGB
 	// triangle Fan
 	0, 0, 1, 1, 1,
-	-.5, -.5, .7, .7, .7,
-	.5, -.5, .7, .7, .7,
-	.5, .5, .7, .7, .7,
-	-.5, .5, .7, .7, .7,
-	-.5, -.5, .7, .7, .7,
+	-.5, -.8, .7, .7, .7,
+	.5, -.8, .7, .7, .7,
+	.5, .8, .7, .7, .7,
+	-.5, .8, .7, .7, .7,
+	-.5, -.8, .7, .7, .7,
 
 	// Line1
 	-.5, 0, 1, 0, 0,
 	.5, 0, 1, 0, 0,
 
 	// mallets
-	0, -.25, 0, 0, 1,
-	0, .25, 1, 0, 0,
+	0, -.4, 0, 0, 1,
+	0, .4, 1, 0, 0,
 )
 
 // }}}
 
 // {{{ shader
 var vShader = `#version 100
+uniform mat4 u_Matrix;
+
 attribute vec4 a_Position;
 attribute vec4 a_Color;
 
 varying vec4 v_Color;
 
 void main() {
-	gl_Position = a_Position;
+	gl_Position = u_Matrix * a_Position;
 	gl_PointSize = 10.0;
 	v_Color = a_Color;
 }
@@ -63,10 +65,12 @@ void main() {
 
 // {{{ global value
 var (
-	buf      gl.Buffer
-	color    gl.Attrib
-	position gl.Attrib
-	program  gl.Program
+	buf            gl.Buffer
+	color          gl.Attrib
+	position       gl.Attrib
+	program        gl.Program
+	projection     gl.Uniform
+	projectionMat4 *f32.Mat4 = new(f32.Mat4)
 ) // }}}
 
 // {{{ const
@@ -100,6 +104,7 @@ func main() {
 				}
 			case size.Event:
 				sz = e
+				onSizeChanged(sz)
 			case paint.Event:
 				if glctx == nil || e.External {
 					continue
@@ -133,6 +138,7 @@ func onStart(glctx gl.Context) {
 	// attribute, uniform settings
 	position = glctx.GetAttribLocation(program, "a_Position")
 	color = glctx.GetAttribLocation(program, "a_Color")
+	projection = glctx.GetUniformLocation(program, "u_Matrix")
 
 }
 
@@ -141,20 +147,39 @@ func onStop(glctx gl.Context) {
 	glctx.DeleteBuffer(buf)
 }
 
+func onSizeChanged(sz size.Event) {
+	// TODO Orientation
+	if projectionMat4 != nil {
+		var aspectRatio float32
+		if sz.WidthPx > sz.HeightPx {
+			aspectRatio = float32(sz.WidthPx / sz.HeightPx)
+			Ortho(projectionMat4, -aspectRatio, aspectRatio, -1, 1, -1, 1)
+		} else {
+			aspectRatio = float32(sz.HeightPx / sz.WidthPx)
+			Ortho(projectionMat4, -1, 1, -aspectRatio, aspectRatio, -1, 1)
+		}
+	}
+}
+
 func onPaint(ctx gl.Context, sz size.Event) {
-	ctx.ClearColor(1, 0, 0, 1)
+	ctx.ClearColor(0, 0, 0, 0)
 	ctx.Clear(gl.COLOR_BUFFER_BIT)
 
 	ctx.UseProgram(program)
-	// ctx.Enable(gl
 
 	// // buffer settings
 	ctx.BindBuffer(gl.ARRAY_BUFFER, buf)
 	// stride, offset is byte number.
 	ctx.VertexAttribPointer(position, POSITION_COMPONENT_COUNT, gl.FLOAT, false, STRIDE, 0)
 	ctx.EnableVertexAttribArray(position)
+	defer ctx.DisableVertexAttribArray(position)
 	ctx.VertexAttribPointer(color, COLOR_COMPONENT_COUNT, gl.FLOAT, false, STRIDE, START_COLOR_OFFSET)
 	ctx.EnableVertexAttribArray(color)
+	defer ctx.DisableVertexAttribArray(color)
+
+	// uniform
+	// githubのtutoralだとmat4から[]float32への変換を自分でやっているだと。。。
+	ctx.UniformMatrix4fv(projection, ConvertMat4ToFloat32Array(projectionMat4))
 
 	ctx.DrawArrays(gl.TRIANGLE_FAN, 0, 6)
 
@@ -167,7 +192,38 @@ func onPaint(ctx gl.Context, sz size.Event) {
 	ctx.DrawArrays(gl.POINTS, 8, 1)
 	ctx.DrawArrays(gl.POINTS, 9, 1)
 
-	ctx.DisableVertexAttribArray(position)
-	ctx.DisableVertexAttribArray(color)
-
 } // }}}
+
+// {{{ f32.Mat4 Helper mehtod
+
+func Ortho(m *f32.Mat4, left, right, bottom, top, near, far float32) {
+	m[0][0] = 2 / (right - left)
+	m[0][1] = 0
+	m[0][2] = 0
+
+	m[1][0] = 0
+	m[1][1] = 2 / (top - bottom)
+	m[1][2] = 0
+
+	m[2][0] = 0
+	m[2][1] = 0
+	m[2][2] = -2 / (far - near)
+
+	m[0][3] = -(right + left) / (right - left)
+	m[1][3] = -(top + bottom) / (top - bottom)
+	m[2][3] = -(far + near) / (far - near)
+	m[3][3] = 1
+}
+
+// f32.Mat4 to [16]float32
+func ConvertMat4ToFloat32Array(m *f32.Mat4) []float32 {
+	out := make([]float32, 16)
+	for i := 0; i < 4; i++ {
+		for j := 0; j < 4; j++ {
+			out[i*4+j] = m[i][j]
+		}
+	}
+	return out
+}
+
+// }}}
