@@ -17,23 +17,22 @@ import (
 
 // {{{ vertex data
 var tableVertices = f32.Bytes(binary.LittleEndian,
-	// triangle 1
-	-.5, -.5,
-	.5, .5,
-	-.5, .5,
-
-	// triangle 2
-	-.5, -.5,
-	.5, -.5,
-	.5, .5,
+	// Order of XYRGB
+	// triangle Fan
+	0, 0, 1, 1, 1,
+	-.5, -.5, .7, .7, .7,
+	.5, -.5, .7, .7, .7,
+	.5, .5, .7, .7, .7,
+	-.5, .5, .7, .7, .7,
+	-.5, -.5, .7, .7, .7,
 
 	// Line1
-	-.5, 0,
-	.5, 0,
+	-.5, 0, 1, 0, 0,
+	.5, 0, 1, 0, 0,
 
 	// mallets
-	0, -.25,
-	0, .25,
+	0, -.25, 0, 0, 1,
+	0, .25, 1, 0, 0,
 )
 
 // }}}
@@ -41,31 +40,48 @@ var tableVertices = f32.Bytes(binary.LittleEndian,
 // {{{ shader
 var vShader = `#version 100
 attribute vec4 a_Position;
+attribute vec4 a_Color;
+
+varying vec4 v_Color;
 
 void main() {
 	gl_Position = a_Position;
 	gl_PointSize = 10.0;
+	v_Color = a_Color;
 }
 `
 
 var fShader = `#version 100
 precision mediump float;
 
-uniform vec4 u_Color;
+varying vec4 v_Color;
 
 void main() {
-	gl_FragColor = u_Color;
+	gl_FragColor = v_Color;
 }
 ` // }}}
 
 // {{{ global value
 var (
 	buf      gl.Buffer
-	color    gl.Uniform
+	color    gl.Attrib
 	position gl.Attrib
 	program  gl.Program
 ) // }}}
 
+// {{{ const
+
+const (
+	POSITION_COMPONENT_COUNT = 2
+	COLOR_COMPONENT_COUNT    = 3
+	BYTE_PER_FLOAT           = 4
+	START_COLOR_OFFSET       = POSITION_COMPONENT_COUNT * BYTE_PER_FLOAT
+	STRIDE                   = (POSITION_COMPONENT_COUNT + COLOR_COMPONENT_COUNT) * BYTE_PER_FLOAT
+)
+
+// }}}
+
+// {{{ main method
 func main() {
 	app.Main(func(a app.App) {
 		var glctx gl.Context
@@ -96,6 +112,8 @@ func main() {
 	})
 }
 
+// }}}
+
 // {{{ event mehtod
 func onStart(glctx gl.Context) {
 	log.Print(gl.Version())
@@ -114,7 +132,7 @@ func onStart(glctx gl.Context) {
 
 	// attribute, uniform settings
 	position = glctx.GetAttribLocation(program, "a_Position")
-	color = glctx.GetUniformLocation(program, "u_Color")
+	color = glctx.GetAttribLocation(program, "a_Color")
 
 }
 
@@ -123,8 +141,6 @@ func onStop(glctx gl.Context) {
 	glctx.DeleteBuffer(buf)
 }
 
-var green float32
-
 func onPaint(ctx gl.Context, sz size.Event) {
 	ctx.ClearColor(1, 0, 0, 1)
 	ctx.Clear(gl.COLOR_BUFFER_BIT)
@@ -132,34 +148,26 @@ func onPaint(ctx gl.Context, sz size.Event) {
 	ctx.UseProgram(program)
 	// ctx.Enable(gl
 
-	// setting uniform
-	green += 0.01
-	if green >= 1 {
-		green = 0
-	}
-	ctx.Uniform4f(color, 0, green, 0, 1)
-
 	// // buffer settings
 	ctx.BindBuffer(gl.ARRAY_BUFFER, buf)
+	// stride, offset is byte number.
+	ctx.VertexAttribPointer(position, POSITION_COMPONENT_COUNT, gl.FLOAT, false, STRIDE, 0)
 	ctx.EnableVertexAttribArray(position)
-	ctx.VertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
+	ctx.VertexAttribPointer(color, COLOR_COMPONENT_COUNT, gl.FLOAT, false, STRIDE, START_COLOR_OFFSET)
+	ctx.EnableVertexAttribArray(color)
 
-	// ctx.DrawArrays(gl.TRIANGLES, 0, int(len(tableVertices)))
-	ctx.DrawArrays(gl.TRIANGLES, 0, 6)
+	ctx.DrawArrays(gl.TRIANGLE_FAN, 0, 6)
 
-	// draw Line
-	ctx.Uniform4f(color, 1, 1, 1, 1)
 	ctx.DrawArrays(gl.LINES, 6, 2)
 
 	// draw mallets
 	// GL_VERTEX_PROGRAM_POINT_SIZE is not define in go.
 	// https://forums.khronos.org/showthread.php/5984-gl_PointSize-problem
 	ctx.Enable(0x8642)
-	ctx.Uniform4f(color, 1, 0, 0, 1)
 	ctx.DrawArrays(gl.POINTS, 8, 1)
-	ctx.Uniform4f(color, 0, 0, 1, 1)
 	ctx.DrawArrays(gl.POINTS, 9, 1)
 
 	ctx.DisableVertexAttribArray(position)
+	ctx.DisableVertexAttribArray(color)
 
 } // }}}
