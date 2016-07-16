@@ -17,22 +17,22 @@ import (
 
 // {{{ vertex data
 var tableVertices = f32.Bytes(binary.LittleEndian,
-	// Order of XYRGB
+	// Order of XYZWRGB
 	// triangle Fan
-	0, 0, 1, 1, 1,
-	-.5, -.8, .7, .7, .7,
-	.5, -.8, .7, .7, .7,
-	.5, .8, .7, .7, .7,
-	-.5, .8, .7, .7, .7,
-	-.5, -.8, .7, .7, .7,
+	0, 0, 0, 1.5, 1, 1, 1,
+	-.5, -.8, 0, 1, .7, .7, .7,
+	.5, -.8, 0, 1, .7, .7, .7,
+	.5, .8, 0, 2, .7, .7, .7,
+	-.5, .8, 0, 2, .7, .7, .7,
+	-.5, -.8, 0, 1, .7, .7, .7,
 
 	// Line1
-	-.5, 0, 1, 0, 0,
-	.5, 0, 1, 0, 0,
+	-.5, 0, 0, 1.5, 1, 0, 0,
+	.5, 0, 0, 1.5, 1, 0, 0,
 
 	// mallets
-	0, -.4, 0, 0, 1,
-	0, .4, 1, 0, 0,
+	0, -.4, 0, 1.25, 0, 0, 1,
+	0, .4, 0, 1.75, 1, 0, 0,
 )
 
 // }}}
@@ -76,7 +76,7 @@ var (
 // {{{ const
 
 const (
-	POSITION_COMPONENT_COUNT = 2
+	POSITION_COMPONENT_COUNT = 4
 	COLOR_COMPONENT_COUNT    = 3
 	BYTE_PER_FLOAT           = 4
 	START_COLOR_OFFSET       = POSITION_COMPONENT_COUNT * BYTE_PER_FLOAT
