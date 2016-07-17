@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/binary"
 	"log"
+	"math"
 
 	"golang.org/x/mobile/app"
 	"golang.org/x/mobile/event/lifecycle"
@@ -17,22 +18,22 @@ import (
 
 // {{{ vertex data
 var tableVertices = f32.Bytes(binary.LittleEndian,
-	// Order of XYZWRGB
+	// Order of XYRGB
 	// triangle Fan
-	0, 0, 0, 1.5, 1, 1, 1,
-	-.5, -.8, 0, 1, .7, .7, .7,
-	.5, -.8, 0, 1, .7, .7, .7,
-	.5, .8, 0, 2, .7, .7, .7,
-	-.5, .8, 0, 2, .7, .7, .7,
-	-.5, -.8, 0, 1, .7, .7, .7,
+	0, 0, 1, 1, 1,
+	-.5, -.8, .7, .7, .7,
+	.5, -.8, .7, .7, .7,
+	.5, .8, .7, .7, .7,
+	-.5, .8, .7, .7, .7,
+	-.5, -.8, .7, .7, .7,
 
 	// Line1
-	-.5, 0, 0, 1.5, 1, 0, 0,
-	.5, 0, 0, 1.5, 1, 0, 0,
+	-.5, 0, 1, 0, 0,
+	.5, 0, 1, 0, 0,
 
 	// mallets
-	0, -.4, 0, 1.25, 0, 0, 1,
-	0, .4, 0, 1.75, 1, 0, 0,
+	0, -.4, 0, 0, 1,
+	0, .4, 1, 0, 0,
 )
 
 // }}}
@@ -71,12 +72,13 @@ var (
 	program        gl.Program
 	projection     gl.Uniform
 	projectionMat4 *f32.Mat4 = new(f32.Mat4)
+	modelMat4      *f32.Mat4 = new(f32.Mat4)
 ) // }}}
 
 // {{{ const
 
 const (
-	POSITION_COMPONENT_COUNT = 4
+	POSITION_COMPONENT_COUNT = 2
 	COLOR_COMPONENT_COUNT    = 3
 	BYTE_PER_FLOAT           = 4
 	START_COLOR_OFFSET       = POSITION_COMPONENT_COUNT * BYTE_PER_FLOAT
@@ -104,7 +106,7 @@ func main() {
 				}
 			case size.Event:
 				sz = e
-				onSizeChanged(sz)
+				onSizeChanged(glctx, sz)
 			case paint.Event:
 				if glctx == nil || e.External {
 					continue
@@ -147,18 +149,40 @@ func onStop(glctx gl.Context) {
 	glctx.DeleteBuffer(buf)
 }
 
-func onSizeChanged(sz size.Event) {
-	// TODO Orientation
-	if projectionMat4 != nil {
-		var aspectRatio float32
-		if sz.WidthPx > sz.HeightPx {
-			aspectRatio = float32(sz.WidthPx / sz.HeightPx)
-			Ortho(projectionMat4, -aspectRatio, aspectRatio, -1, 1, -1, 1)
-		} else {
-			aspectRatio = float32(sz.HeightPx / sz.WidthPx)
-			Ortho(projectionMat4, -1, 1, -aspectRatio, aspectRatio, -1, 1)
-		}
+func onSizeChanged(ctx gl.Context, sz size.Event) {
+	if ctx != nil {
+		//ctx.Viewport(0, 0, sz.WidthPx, sz.HeightPx)
 	}
+	// initialize motrix
+	p := new(f32.Mat4)
+	p.Identity()
+	modelMat4.Identity()
+	modelMat4.Translate(p, 0, 0, -2.5)
+	log.Printf("translate:\n%v", modelMat4) // 想定通りの値
+	// RotateXM(modelMat4, DegreeToRadian(60))
+	// p.Identity()
+	modelMat4 = RotateXM(modelMat4, DegreeToRadian(30))
+	log.Printf("rotate:\n%v", p)
+	// rotate * translate
+	//modelMat4 = Mul(p, modelMat4)
+	//log.Printf("rotate * translate:\n%v", p)
+
+	if projectionMat4 != nil {
+		// var aspectRatio float32
+		// if sz.WidthPx > sz.HeightPx {
+		// 	aspectRatio = float32(sz.WidthPx / sz.HeightPx)
+		// 	Ortho(projectionMat4, -aspectRatio, aspectRatio, -1, 1, -1, 1)
+		// } else {
+		// 	aspectRatio = float32(sz.HeightPx / sz.WidthPx)
+		// 	Ortho(projectionMat4, -1, 1, -aspectRatio, aspectRatio, -1, 1)
+		// }
+		projectionMat4.Identity()
+		PerspectiveM(projectionMat4, 45, float32(sz.WidthPx)/float32(sz.HeightPx), 1, 10)
+	}
+
+	// calculate projection * model
+	projectionMat4 = Mul(projectionMat4, modelMat4)
+	log.Println(projectionMat4)
 }
 
 func onPaint(ctx gl.Context, sz size.Event) {
@@ -224,6 +248,77 @@ func ConvertMat4ToFloat32Array(m *f32.Mat4) []float32 {
 		}
 	}
 	return out
+}
+
+func DegreeToRadian(deg float32) f32.Radian {
+	return f32.Radian(deg * math.Pi / 180)
+}
+
+func CopyMat4(m *f32.Mat4) *f32.Mat4 {
+	ret := new(f32.Mat4)
+	ret[0][0] = m[0][0]
+	ret[0][1] = m[0][1]
+	ret[0][2] = m[0][2]
+	ret[0][3] = m[0][3]
+	ret[1][0] = m[1][0]
+	ret[1][1] = m[1][1]
+	ret[1][2] = m[1][2]
+	ret[1][3] = m[1][3]
+	ret[2][0] = m[2][0]
+	ret[2][1] = m[2][1]
+	ret[2][2] = m[2][2]
+	ret[2][3] = m[2][3]
+	ret[3][0] = m[3][0]
+	ret[3][1] = m[3][1]
+	ret[3][2] = m[3][2]
+	ret[3][3] = m[3][3]
+	return ret
+}
+
+func PerspectiveM(m *f32.Mat4, yFovInDegrees, aspect, n, f float32) {
+	rad := DegreeToRadian(yFovInDegrees)
+	a := float32(1.0 / math.Tan(float64(rad)/2.0))
+	m[0][0] = a / aspect
+	m[0][1] = 0
+	m[0][2] = 0
+	m[0][3] = 0
+
+	m[1][0] = 0
+	m[1][1] = a
+	m[1][2] = 0
+	m[1][3] = 0
+
+	m[2][0] = 0
+	m[2][1] = 0
+	m[2][2] = -((f + n) / (f - n))
+	m[2][3] = -1
+
+	m[3][0] = 0
+	m[3][1] = 0
+	m[3][2] = -((2 * f * n) / (f - n))
+	m[3][3] = 0
+}
+
+// rotate matrix
+func RotateXM(m *f32.Mat4, rad f32.Radian) *f32.Mat4 {
+	ret := new(f32.Mat4)
+	ret.Identity()
+	a := new(f32.Mat4)
+	a.Identity()
+	r := float64(rad)
+	a[1][1] = float32(math.Cos(r))
+	a[1][2] = float32(-math.Sin(r))
+	a[2][1] = float32(math.Sin(r))
+	a[2][2] = float32(math.Cos(r))
+	ret.Mul(a, m)
+	return ret
+}
+
+func Mul(a *f32.Mat4, b *f32.Mat4) *f32.Mat4 {
+	ret := new(f32.Mat4)
+	ret.Identity()
+	ret.Mul(a, b)
+	return ret
 }
 
 // }}}
