@@ -11,6 +11,7 @@ import (
 	"golang.org/x/mobile/event/size"
 	"golang.org/x/mobile/exp/f32"
 
+	"github.com/go-gl/mathgl/mgl32"
 	"golang.org/x/mobile/exp/gl/glutil"
 	"golang.org/x/mobile/gl"
 ) // }}}
@@ -19,20 +20,20 @@ import (
 var tableVertices = f32.Bytes(binary.LittleEndian,
 	// Order of XYZWRGB
 	// triangle Fan
-	0, 0, 0, 1.5, 1, 1, 1,
-	-.5, -.8, 0, 1, .7, .7, .7,
-	.5, -.8, 0, 1, .7, .7, .7,
-	.5, .8, 0, 2, .7, .7, .7,
-	-.5, .8, 0, 2, .7, .7, .7,
-	-.5, -.8, 0, 1, .7, .7, .7,
+	0, 0, 1, 1, 1,
+	-.5, -.8, .7, .7, .7,
+	.5, -.8, .7, .7, .7,
+	.5, .8, .7, .7, .7,
+	-.5, .8, .7, .7, .7,
+	-.5, -.8, .7, .7, .7,
 
 	// Line1
-	-.5, 0, 0, 1.5, 1, 0, 0,
-	.5, 0, 0, 1.5, 1, 0, 0,
+	-.5, 0, 1, 0, 0,
+	.5, 0, 1, 0, 0,
 
 	// mallets
-	0, -.4, 0, 1.25, 0, 0, 1,
-	0, .4, 0, 1.75, 1, 0, 0,
+	0, -.4, 0, 0, 1,
+	0, .4, 1, 0, 0,
 )
 
 // }}}
@@ -70,13 +71,13 @@ var (
 	position       gl.Attrib
 	program        gl.Program
 	projection     gl.Uniform
-	projectionMat4 *f32.Mat4 = new(f32.Mat4)
+	projectionMat4 mgl32.Mat4
 ) // }}}
 
 // {{{ const
 
 const (
-	POSITION_COMPONENT_COUNT = 4
+	POSITION_COMPONENT_COUNT = 2
 	COLOR_COMPONENT_COUNT    = 3
 	BYTE_PER_FLOAT           = 4
 	START_COLOR_OFFSET       = POSITION_COMPONENT_COUNT * BYTE_PER_FLOAT
@@ -148,17 +149,21 @@ func onStop(glctx gl.Context) {
 }
 
 func onSizeChanged(sz size.Event) {
-	// TODO Orientation
-	if projectionMat4 != nil {
-		var aspectRatio float32
-		if sz.WidthPx > sz.HeightPx {
-			aspectRatio = float32(sz.WidthPx / sz.HeightPx)
-			Ortho(projectionMat4, -aspectRatio, aspectRatio, -1, 1, -1, 1)
-		} else {
-			aspectRatio = float32(sz.HeightPx / sz.WidthPx)
-			Ortho(projectionMat4, -1, 1, -aspectRatio, aspectRatio, -1, 1)
-		}
+	var aspectRatio float32
+	if sz.WidthPx > sz.HeightPx {
+		aspectRatio = float32(sz.WidthPx / sz.HeightPx)
+		//projectionMat4 = mgl32.Ortho(-1, 1, -aspectRatio, aspectRatio, -1, 10)
+	} else {
+		aspectRatio = float32(sz.HeightPx / sz.WidthPx)
+		//projectionMat4 = mgl32.Ortho(-1, 1, -aspectRatio, aspectRatio, -1, 10)
 	}
+
+	projectionMat4 = mgl32.Perspective(45, aspectRatio, 1, 10)
+
+	modelMat4 := mgl32.Ident4()
+	modelMat4 = modelMat4.Mul4(mgl32.Translate3D(0, 0, -2.5))
+	modelMat4 = modelMat4.Mul4(mgl32.HomogRotate3DX(-60))
+	projectionMat4 = projectionMat4.Mul4(modelMat4)
 }
 
 func onPaint(ctx gl.Context, sz size.Event) {
@@ -178,8 +183,7 @@ func onPaint(ctx gl.Context, sz size.Event) {
 	defer ctx.DisableVertexAttribArray(color)
 
 	// uniform
-	// githubのtutoralだとmat4から[]float32への変換を自分でやっているだと。。。
-	ctx.UniformMatrix4fv(projection, ConvertMat4ToFloat32Array(projectionMat4))
+	ctx.UniformMatrix4fv(projection, ConvertMat4ToFloat32Array(&projectionMat4))
 
 	ctx.DrawArrays(gl.TRIANGLE_FAN, 0, 6)
 
@@ -196,31 +200,11 @@ func onPaint(ctx gl.Context, sz size.Event) {
 
 // {{{ f32.Mat4 Helper mehtod
 
-func Ortho(m *f32.Mat4, left, right, bottom, top, near, far float32) {
-	m[0][0] = 2 / (right - left)
-	m[0][1] = 0
-	m[0][2] = 0
-
-	m[1][0] = 0
-	m[1][1] = 2 / (top - bottom)
-	m[1][2] = 0
-
-	m[2][0] = 0
-	m[2][1] = 0
-	m[2][2] = -2 / (far - near)
-
-	m[0][3] = -(right + left) / (right - left)
-	m[1][3] = -(top + bottom) / (top - bottom)
-	m[2][3] = -(far + near) / (far - near)
-	m[3][3] = 1
-}
-
-// f32.Mat4 to [16]float32
-func ConvertMat4ToFloat32Array(m *f32.Mat4) []float32 {
+func ConvertMat4ToFloat32Array(m *mgl32.Mat4) []float32 {
 	out := make([]float32, 16)
 	for i := 0; i < 4; i++ {
 		for j := 0; j < 4; j++ {
-			out[i*4+j] = m[i][j]
+			out[i*4+j] = m[i*4+j]
 		}
 	}
 	return out
